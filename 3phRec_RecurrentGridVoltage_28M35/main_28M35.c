@@ -54,7 +54,7 @@ volatile float Vo = 240.0;
 #define PID_KD        2.2919e-6f
 
 // Parámetros de Precarga
-#define NUM_RAMP_CYCLES 50       // Número de cruces por cero para que cada fase
+#define NUM_RAMP_CYCLES 100       // Número de cruces por cero para que cada fase
 
 // Factores de Escala ADC
 #define ADC_VOLTAGE_SCALE_FACTOR ((2.0f * 831.29f) / 4095.0f)               // Vref=3V
