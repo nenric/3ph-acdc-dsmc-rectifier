@@ -1,0 +1,6 @@
+# MATLAB / Simulink ignores
+*.asv
+slprj/
+*.slxc
+*.mat
+*~
