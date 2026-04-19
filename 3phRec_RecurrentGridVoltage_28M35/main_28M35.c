@@ -2,10 +2,10 @@
 //
 // FILE:   main.c
 //
-// TITLE:  Control de Rectificador Trifásico con TMS320F2833x
+// TITLE:  Control de Rectificador Trifï¿½sico con TMS320F2833x
 //
-// DESC:   Implementa el control para un rectificador trifásico, incluyendo
-//         PWMs síncronos, ADC disparado por PWM, máquina de estados
+// DESC:   Implementa el control para un rectificador trifï¿½sico, incluyendo
+//         PWMs sï¿½ncronos, ADC disparado por PWM, mï¿½quina de estados
 //         (precarga, rampa, normal), y algoritmos de control en DSMC.
 //
 // Target: F28M35H52C (C28x core)
@@ -22,39 +22,39 @@ typedef unsigned long ulong;
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
-// Definiciones para la configuración del PWM y del sistema
+// Definiciones para la configuraciï¿½n del PWM y del sistema
 #define SYSCLKOUT_FREQ_HZ   150000000UL // (150 MHz)
 #define PWM_FREQ_HZ         20000UL     // (20 kHz)
 
 // TBPRD se calcula para el modo ascendente-descendente:
 #define TBPRD_VALUE         (SYSCLKOUT_FREQ_HZ / (2 * PWM_FREQ_HZ))
 
-// Definición para el valor de la Banda Muerta en ciclos de TBCLK
+// Definiciï¿½n para el valor de la Banda Muerta en ciclos de TBCLK
 #define DEAD_BAND_CYCLES    102
 
 // Definiciones para el ADC
 #define ADC_NUM_CHANNELS    7
-#define ADC_ACQ_PS_VALUE    6           // Tiempo de adquisición
+#define ADC_ACQ_PS_VALUE    6           // Tiempo de adquisiciï¿½n
 
-// Parámetros del Sistema
+// Parï¿½metros del Sistema
 #define Ts (1.0f / 20000.0f)                // Periodo de muestreo (s)
-#define L 2.94e-3f                          // Inductancia de línea (H)
-//#define K ((L / Ts)*0.25f)                  // Ganancia del control deslizante
-volatile float K = ((L / Ts));
+#define L 2.94e-3f                          // Inductancia de lï¿½nea (H)
+#define K_max ((L / Ts))                  // Ganancia del control deslizante
+volatile float K = 0.1*(K_max);
 #define w  (2.0f * 3.14159265f * 50.0f)     // Frecuencia angular (rad/s)
 #define Vg_rms 30.0f                        // Tension RMS de la red (V)
 #define Po 288.0f                           // Potencia nominal (W)
 #define fr 50.0f                            // Frecuencia de la red (Hz)
-//#define Vo 240.0f                 // Tensión de salida de referencia nominal (V)
+//#define Vo 240.0f                 // Tensiï¿½n de salida de referencia nominal (V)
 volatile float Vo = 240.0;
 
-// Parámetros del Controlador PID
+// Parï¿½metros del Controlador PID
 #define PID_KP        (0.4585f * 0.5)
 #define PID_KI        25.4122f
 #define PID_KD        2.2919e-6f
 
-// Parámetros de Precarga
-#define NUM_RAMP_CYCLES 100       // Número de cruces por cero para que cada fase
+// Parï¿½metros de Precarga
+#define NUM_RAMP_CYCLES 100       // Nï¿½mero de cruces por cero para que cada fase
 
 // Factores de Escala ADC
 #define ADC_VOLTAGE_SCALE_FACTOR ((2.0f * 831.29f) / 4095.0f)               // Vref=3V
@@ -62,12 +62,13 @@ volatile float Vo = 240.0;
 #define ADC_VOLTAGE_OUT_SCALE_FACTOR (930.81f / 4095.0f)                    // Vref=3V
 #define ADC_OFFSET 2047.5f
 
-// Definición de los estados del sistema para la máquina de estados
+// Definiciï¿½n de los estados del sistema para la mï¿½quina de estados
 typedef enum {
     STATE_IDLE,                 // Estado de reposo, PWMs deshabilitados
     STATE_PRECHARGE_INIT,       // Precarga inicial
     STATE_PRECHARGE_RAMP,       // Rampa incremental de la corriente de referencia
-    STATE_NORMAL_OPERATION,     // Funcionamiento normal con control PID de tensión
+    STATE_HOLD_CURRENT,         // Mantiene Ie_target constante antes de activar PID
+    STATE_NORMAL_OPERATION,     // Funcionamiento normal con control PID de tensiï¿½n
     STATE_FAULT                 // Estado de fallo, PWMs deshabilitados
 } SystemState;
 
@@ -82,18 +83,18 @@ typedef enum {
 //#pragma CODE_SECTION(epwm2_isr, ".TI.ramfunc"); // TEST
 
 
-void Init_3phase_PWMs(void);        // Configura los 3 módulos ePWM y el trigger ADC
+void Init_3phase_PWMs(void);        // Configura los 3 mï¿½dulos ePWM y el trigger ADC
 void Update_PWM_DutyCycles(void);   // Actualiza los registros CMPA de los ePWMs con da, db, dc globales
 void Init_PWM_GPIO(void);           // Configura los pines GPIO para las salidas ePWM
-void Init_ADC_SOC(void);            // Configura los canales del ADC, SOC y la interrupción
-void Initialization(void);          // Inicializa parámetros de control
+void Init_ADC_SOC(void);            // Configura los canales del ADC, SOC y la interrupciï¿½n
+void Initialization(void);          // Inicializa parï¿½metros de control
 void ControlAlgorithm(void);        // Algoritmo de control principal
 void IeRampAlgorithm(void);         // Algoritmo para la rampa de corriente de referencia
-void Update_ADC_Values(void);       // Escala las lecturas raw del ADC a valores físicos
+void Update_ADC_Values(void);       // Escala las lecturas raw del ADC a valores fï¿½sicos
 void ResetVariables(void);          // Resetea las varibales en caso que se pare el funcionamiento
 void Init_DMA_ADC(void);
-//__interrupt void adc_isr(void);       // Rutina de servicio de interrupción del ADC
-__interrupt void epwm1_isr(void);       // Rutina de interrupción disparada por ePWM1 CMPB
+//__interrupt void adc_isr(void);       // Rutina de servicio de interrupciï¿½n del ADC
+__interrupt void epwm1_isr(void);       // Rutina de interrupciï¿½n disparada por ePWM1 CMPB
 //__interrupt void epwm2_isr(void);     // TEST
 __interrupt void dma_adc_isr(void);
 
@@ -112,10 +113,10 @@ volatile float Ie_target = 0.0f; // Amplitud objetivo final de la corriente de r
 
 // Variables para la Precarga Individual por Fase
 volatile float Iea_ramp = 0.0f, Ieb_ramp = 0.0f, Iec_ramp = 0.0f;           // Amplitudes actuales de la rampa
-volatile float ramp_step = 0.0f;                                            // Tamaño del incremento de Ie_ramp en cada cruce por cero de esa fase
+volatile float ramp_step = 0.0f;                                            // Tamaï¿½o del incremento de Ie_ramp en cada cruce por cero de esa fase
 volatile Uint16 ramp_started_a = 0, ramp_started_b = 0, ramp_started_c = 0;  // Flags de inicio de rampa por fase
-volatile Uint16 ramp_done_a = 0, ramp_done_b = 0, ramp_done_c = 0;           // Flags de finalización de rampa por fase
-volatile Uint16 ramp_done = 0;                                               // Flag general de finalización de todas las rampas
+volatile Uint16 ramp_done_a = 0, ramp_done_b = 0, ramp_done_c = 0;           // Flags de finalizaciï¿½n de rampa por fase
+volatile Uint16 ramp_done = 0;                                               // Flag general de finalizaciï¿½n de todas las rampas
 volatile Uint16 zc_a = 0, zc_b = 0, zc_c = 0;                                // Flags de cruce por cero
 volatile Uint16 start=0;
 
@@ -142,12 +143,12 @@ volatile Uint16 adc_ready = 0;                   // Flag activado por la ISR del
 volatile SystemState STATE = STATE_IDLE; // Estado inicial
 
 volatile float dmin = 0.0f;
-//volatile float testa = 0.5f; //TEST
+volatile Uint16 enable_pid = 0;
 
 
 
 //***************************************************************************
-// Función Principal - main
+// Funciï¿½n Principal - main
 //***************************************************************************
 main()
 {
@@ -160,7 +161,7 @@ main()
 
     Init_PWM_GPIO(); // Configurar GPIOs para ePWM
 
-    // Deshabilitar interrupciones e inicializar tabla de vectores de interrupción
+    // Deshabilitar interrupciones e inicializar tabla de vectores de interrupciï¿½n
     DINT;
     InitPieCtrl();
     IER = 0x0000;
@@ -177,7 +178,7 @@ main()
 
     // Inicializar ADC
     InitAdc1();
-    Init_ADC_SOC(); // Configurar los canales ADC, disparo y interrupción
+    Init_ADC_SOC(); // Configurar los canales ADC, disparo y interrupciï¿½n
 
     // Inicializar PWMs y el trigger para el ADC desde ePWM1
     Init_3phase_PWMs();
@@ -196,9 +197,9 @@ main()
     EINT;                              // Habilitar Interrupciones Globales INTM
     ERTM;                              // Habilitar Interrupciones Globales en tiempo real DBGM
 
-    // Inicializa parámetros de control
+    // Inicializa parï¿½metros de control
     Initialization();
-    GpioG2DataRegs.GPESET.bit.GPIO131 = 1;      // Encender la ventilación
+    GpioG2DataRegs.GPESET.bit.GPIO131 = 1;      // Encender la ventilaciï¿½n
     GpioDataRegs.GPCSET.bit.GPIO71 = 1;         //Desactivar la descarga de condensadores
 
     // --- Bucle Principal ---
@@ -210,7 +211,7 @@ main()
 
             Update_ADC_Values();    // Escalar lecturas ADC
 
-            // --- Máquina de Estados ---
+            // --- Mï¿½quina de Estados ---
             switch(STATE)
             {
                 case STATE_IDLE:
@@ -233,14 +234,15 @@ main()
 
                 case STATE_PRECHARGE_RAMP:          // Rampa de corriente
                     IeRampAlgorithm();
-                    if (ramp_done) STATE = STATE_NORMAL_OPERATION;
+                    if (ramp_done) STATE = STATE_HOLD_CURRENT;
                     ControlAlgorithm();
                     break;
 
-                case STATE_NORMAL_OPERATION:        // Funcionamiento normal
+                case STATE_HOLD_CURRENT:        
                     if (ramp_done){
                        ramp_done=0;
                        dmin = 0.32f;
+                       K = 0.25*(K_max);
                        EPwm1Regs.CMPB = 1070;
                        //Activar modo Immediato
                        EALLOW;
@@ -249,6 +251,11 @@ main()
                        EPwm3Regs.CMPCTL.bit.SHDWAMODE = CC_IMMEDIATE;
                        EDIS;
                     }
+                    ControlAlgorithm();
+                    if (enable_pid == 1) STATE = STATE_NORMAL_OPERATION;
+                    break;
+
+                case STATE_NORMAL_OPERATION:
                     ControlAlgorithm();
                     break;
 
@@ -275,7 +282,7 @@ main()
 
 
 //***************************************************************************
-// Función Init_PWM_GPIO - Configuración de pines GPIO para ePWM
+// Funciï¿½n Init_PWM_GPIO - Configuraciï¿½n de pines GPIO para ePWM
 //***************************************************************************
 void Init_PWM_GPIO(void)
 {
@@ -309,57 +316,57 @@ void Init_PWM_GPIO(void)
 
 
 //***************************************************************************
-// Función Init_3phase_PWMs - Configuración de los módulos ePWM
+// Funciï¿½n Init_3phase_PWMs - Configuraciï¿½n de los mï¿½dulos ePWM
 //***************************************************************************
 void Init_3phase_PWMs(void)
 {
     EALLOW;
-    // Deshabilitar la sincronización del reloj de la base de tiempo (TBCLK) para todos los ePWM
+    // Deshabilitar la sincronizaciï¿½n del reloj de la base de tiempo (TBCLK) para todos los ePWM
     SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 0;
 
-    // Configuración para ePWM1 (Master)
+    // Configuraciï¿½n para ePWM1 (Master)
     //------------------------------------
-    // Configuración de la Base de Tiempo (TB)
-    EPwm1Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN;  // Modo de conteo: Ascendente-Descendente (simétrico)
-    EPwm1Regs.TBPRD = TBPRD_VALUE;                  // Establecer el período del temporizador
+    // Configuraciï¿½n de la Base de Tiempo (TB)
+    EPwm1Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN;  // Modo de conteo: Ascendente-Descendente (simï¿½trico)
+    EPwm1Regs.TBPRD = TBPRD_VALUE;                  // Establecer el perï¿½odo del temporizador
     EPwm1Regs.TBPHS.half.TBPHS = 0x0000;            // Fase  0
     EPwm1Regs.TBCTR = 0x0000;                       // Limpiar contador de la base de tiempo
 
     EPwm1Regs.TBCTL.bit.PHSEN = TB_DISABLE;         // ePWM1 es maestro
     EPwm1Regs.TBCTL.bit.PRDLD = TB_SHADOW;
-    EPwm1Regs.TBCTL.bit.SYNCOSEL = TB_CTR_ZERO;     // Pulso de sincronización en TBCTR = 0
+    EPwm1Regs.TBCTL.bit.SYNCOSEL = TB_CTR_ZERO;     // Pulso de sincronizaciï¿½n en TBCTR = 0
 
     EPwm1Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;        // TBCLK = SYSCLKOUT
     EPwm1Regs.TBCTL.bit.CLKDIV = TB_DIV1;
 
-    // Configuración del Comparador
+    // Configuraciï¿½n del Comparador
     EPwm1Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;     //CC_IMMEDIATE
     EPwm1Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;      // No aplica en inmediato
 
-    // Configuración del Trigger de Interrupción
+    // Configuraciï¿½n del Trigger de Interrupciï¿½n
     EPwm1Regs.CMPB = 1400;                          // Set CMPB = 1400
     EPwm1Regs.ETSEL.bit.INTSEL = ET_CTRU_CMPB;      // Disparar INT cuando TBCTR = CMPB subiendo
-    EPwm1Regs.ETSEL.bit.INTEN = 1;                  // Habilitar Interrupción ePWM
-    EPwm1Regs.ETPS.bit.INTPRD = ET_1ST;             // Generar interrupción en el primer evento
+    EPwm1Regs.ETSEL.bit.INTEN = 1;                  // Habilitar Interrupciï¿½n ePWM
+    EPwm1Regs.ETPS.bit.INTPRD = ET_1ST;             // Generar interrupciï¿½n en el primer evento
 
-    // Configuración del Calificador de Acción para ePWM1A
+    // Configuraciï¿½n del Calificador de Acciï¿½n para ePWM1A
     EPwm1Regs.AQCTLA.bit.CAU = AQ_SET;              // Poner en alto PWM1A cuando TBCTR = CMPA en conteo ascendente
     EPwm1Regs.AQCTLA.bit.CAD = AQ_CLEAR;            // Poner en bajo PWM1A cuando TBCTR = CMPA en conteo descendente
 
-    // Configuración de Banda Muerta para ePWM1
+    // Configuraciï¿½n de Banda Muerta para ePWM1
     EPwm1Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;  // Habilita DB para ePWM1A y ePWM1B
     EPwm1Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;       // ePWMxB es inv(ePWMxA) con DB
     EPwm1Regs.DBCTL.bit.IN_MODE = DBA_ALL;          // ePWMxA es la fuente para ambos retardos RED y FED
     EPwm1Regs.DBRED = DEAD_BAND_CYCLES;             // Tiempo muerto de subida
     EPwm1Regs.DBFED = DEAD_BAND_CYCLES;             // Tiempo muerto de bajada
 
-    // Configuración del Event Trigger para generar SOCA para el ADC
+    // Configuraciï¿½n del Event Trigger para generar SOCA para el ADC
     EPwm1Regs.ETSEL.bit.SOCAEN = 1;                 // Habilitar  SOCA
     EPwm1Regs.ETSEL.bit.SOCASEL = ET_CTR_ZERO;      // Disparar SOCA cuando TBCTR = 0
     EPwm1Regs.ETPS.bit.SOCAPRD = ET_1ST;            // Generar SOCA en el primer evento
 
 
-    // Configuración para ePWM2 (Esclavo)
+    // Configuraciï¿½n para ePWM2 (Esclavo)
     //------------------------------------
     EPwm2Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN;
     EPwm2Regs.TBPRD = TBPRD_VALUE;
@@ -368,7 +375,7 @@ void Init_3phase_PWMs(void)
 
     EPwm2Regs.TBCTL.bit.PHSEN = TB_ENABLE;          // ePWM2 es esclavo
     EPwm2Regs.TBCTL.bit.PRDLD = TB_SHADOW;
-    EPwm2Regs.TBCTL.bit.SYNCOSEL = TB_SYNC_IN;      // Usar señal de sincronización externa (SYNCIN)
+    EPwm2Regs.TBCTL.bit.SYNCOSEL = TB_SYNC_IN;      // Usar seï¿½al de sincronizaciï¿½n externa (SYNCIN)
 
 
     EPwm2Regs.TBCTL.bit.HSPCLKDIV = TB_DIV1;
@@ -386,14 +393,14 @@ void Init_3phase_PWMs(void)
     EPwm2Regs.AQCTLA.bit.CAU = AQ_SET;
     EPwm2Regs.AQCTLA.bit.CAD = AQ_CLEAR;
 
-    // Configuración de Banda Muerta para ePWM2
+    // Configuraciï¿½n de Banda Muerta para ePWM2
     EPwm2Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
     EPwm2Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;
     EPwm2Regs.DBCTL.bit.IN_MODE = DBA_ALL;
     EPwm2Regs.DBRED = DEAD_BAND_CYCLES;
     EPwm2Regs.DBFED = DEAD_BAND_CYCLES;
 
-    // Configuración para ePWM3 (Esclavo)
+    // Configuraciï¿½n para ePWM3 (Esclavo)
     //------------------------------------
     EPwm3Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN;
     EPwm3Regs.TBPRD = TBPRD_VALUE;
@@ -413,7 +420,7 @@ void Init_3phase_PWMs(void)
     EPwm3Regs.AQCTLA.bit.CAU = AQ_SET;
     EPwm3Regs.AQCTLA.bit.CAD = AQ_CLEAR;
 
-    // Configuración de Banda Muerta para ePWM3
+    // Configuraciï¿½n de Banda Muerta para ePWM3
     EPwm3Regs.DBCTL.bit.OUT_MODE = DB_FULL_ENABLE;
     EPwm3Regs.DBCTL.bit.POLSEL = DB_ACTV_HIC;
     EPwm3Regs.DBCTL.bit.IN_MODE = DBA_ALL;
@@ -427,20 +434,20 @@ void Init_3phase_PWMs(void)
     EPwm2Regs.TZCTL.bit.TZA = TZ_FORCE_LO; EPwm2Regs.TZCTL.bit.TZB = TZ_FORCE_LO;
     EPwm3Regs.TZCTL.bit.TZA = TZ_FORCE_LO; EPwm3Regs.TZCTL.bit.TZB = TZ_FORCE_LO;
 
-    // Habilitar la sincronización del reloj de la base de tiempo (TBCLK) para todos los ePWM
+    // Habilitar la sincronizaciï¿½n del reloj de la base de tiempo (TBCLK) para todos los ePWM
     SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 1;
     EDIS;
 }
 
 
 //***************************************************************************
-// Función Init_ADC_SOC - Configuración del ADC
+// Funciï¿½n Init_ADC_SOC - Configuraciï¿½n del ADC
 //***************************************************************************
 void Init_ADC_SOC(void)
 {
     EALLOW;
-    Adc1Regs.ADCCTL2.bit.ADCNONOVERLAP = 0; // Evitar solapamiento de S/H y conversión //0
-    Adc1Regs.ADCCTL1.bit.INTPULSEPOS = 1;   // Interrupción al final de la conversión
+    Adc1Regs.ADCCTL2.bit.ADCNONOVERLAP = 0; // Evitar solapamiento de S/H y conversiï¿½n //0
+    Adc1Regs.ADCCTL1.bit.INTPULSEPOS = 1;   // Interrupciï¿½n al final de la conversiï¿½n
 
     Adc1Regs.INTSEL1N2.bit.INT1E = 1;       // Habilitar ADCINT1
     Adc1Regs.INTSEL1N2.bit.INT1CONT = 0;    // Deshabilitar modo continuo de ADCINT1
@@ -466,7 +473,7 @@ void Init_ADC_SOC(void)
     Adc1Regs.ADCSOC5CTL.bit.CHSEL = 8;  // SOC5 -> ADCINB0 -> vgc
     Adc1Regs.ADCSOC6CTL.bit.CHSEL = 15; // SOC6 -> ADCINB7 -> vo
 
-    // Configurar tiempo de adquisición para cada SOC
+    // Configurar tiempo de adquisiciï¿½n para cada SOC
     Adc1Regs.ADCSOC0CTL.bit.ACQPS = ADC_ACQ_PS_VALUE;
     Adc1Regs.ADCSOC1CTL.bit.ACQPS = ADC_ACQ_PS_VALUE;
     Adc1Regs.ADCSOC2CTL.bit.ACQPS = ADC_ACQ_PS_VALUE;
@@ -480,11 +487,11 @@ void Init_ADC_SOC(void)
 
 
 //***************************************************************************
-// Función Initialization - Inicialización de parámetros de control
+// Funciï¿½n Initialization - Inicializaciï¿½n de parï¿½metros de control
 //***************************************************************************
 void Initialization(void)
 {
-    // Cálculo de parámetros derivados del sistema
+    // Cï¿½lculo de parï¿½metros derivados del sistema
     Ro = (Vo * Vo) / Po;
     //Ie_target = (2.0f * Vo * Vo) / (3.0f * Vg_rms * sqrt(2) * Ro);
     Ie_target = 6.0f;
@@ -492,11 +499,11 @@ void Initialization(void)
     invVg_peak = 1.0f / (Vg_rms * sqrt(2));
 
     // Calcular el incremento de rampa por paso de muestreo
-    float ramp_duration_seconds = (float)NUM_RAMP_CYCLES / fr;  // Duración total de la rampa en segundos
-    float ramp_total_steps = ramp_duration_seconds / Ts;        // Número total de pasos de simulación para la rampa
+    float ramp_duration_seconds = (float)NUM_RAMP_CYCLES / fr;  // Duraciï¿½n total de la rampa en segundos
+    float ramp_total_steps = ramp_duration_seconds / Ts;        // Nï¿½mero total de pasos de simulaciï¿½n para la rampa
     ramp_step = Ie_target / ramp_total_steps;
 
-    // Inicialización del Controlador PID
+    // Inicializaciï¿½n del Controlador PID
     pid_q0 = PID_KP + (Ts/2.0f)*PID_KI + PID_KD/Ts;
     pid_q1 = -PID_KP + (Ts/2.0f)*PID_KI - (2.0f*PID_KD/Ts);
     pid_q2 = PID_KD/Ts;
@@ -506,7 +513,7 @@ void Initialization(void)
 
 
 //***************************************************************************
-// Función Update_ADC_Values - Escala las lecturas del ADC a valores físicos
+// Funciï¿½n Update_ADC_Values - Escala las lecturas del ADC a valores fï¿½sicos
 //***************************************************************************
 void Update_ADC_Values(void)
 {
@@ -521,7 +528,7 @@ void Update_ADC_Values(void)
 
 
 //***************************************************************************
-// Función Update_PWM_DutyCycles - Actualiza los registros CMPA de los ePWMs
+// Funciï¿½n Update_PWM_DutyCycles - Actualiza los registros CMPA de los ePWMs
 //***************************************************************************
 void Update_PWM_DutyCycles(void)
 {
@@ -530,7 +537,7 @@ void Update_PWM_DutyCycles(void)
     float db_sat = __fmin(1.0f, __fmax(dmin, db));
     float dc_sat = __fmin(1.0f, __fmax(dmin, dc));
 
-    // Conversión a contadores
+    // Conversiï¿½n a contadores
     Uint16 period = TBPRD_VALUE;
 
     EPwm1Regs.CMPA.half.CMPA = (Uint16)(da_sat * period);
@@ -540,19 +547,14 @@ void Update_PWM_DutyCycles(void)
 
 
 //***************************************************************************
-// Función IeRampAlgorithm - Implementa la rampa de corriente de referencia
+// Funciï¿½n IeRampAlgorithm - Implementa la rampa de corriente de referencia
 //***************************************************************************
 void IeRampAlgorithm(void)
 {
-    // Detección de cruce por cero positivo para cada fase
+    // Detecciï¿½n de cruce por cero positivo para cada fase
     zc_a = (vga > 0.01f && mvga[0] < -0.01f);
     zc_b = (vgb > 0.01f && mvgb[0] < -0.01f);
     zc_c = (vgc > 0.01f && mvgc[0] < -0.01f);
-
-    // Test
-       //zc_a = 1;
-       //zc_b = 1;
-       //zc_c = 1;
 
     // Iniciar rampa para cada fase al detectar su primer cruce por cero
     if (zc_a && !ramp_started_a) {
@@ -594,7 +596,7 @@ void IeRampAlgorithm(void)
 
 
 //***************************************************************************
-// Función ControlAlgorithm - Algoritmo de control principal
+// Funciï¿½n ControlAlgorithm - Algoritmo de control principal
 //***************************************************************************
 void ControlAlgorithm(void)
 {
@@ -613,24 +615,44 @@ void ControlAlgorithm(void)
     // Control usando las amplitudes de rampa Iea_ramp, Ieb_ramp, Iec_ramp
     if (STATE == STATE_PRECHARGE_RAMP)
     {
-        // Cálculo de Referencias  (Solo si la rampa ha iniciado)
-        if (ramp_started_a && !ramp_done) {
+        // Cï¿½lculo de Referencias  (Solo si la rampa ha iniciado)
+        if (ramp_started_a) {
 
             da = (K * inv_vo) * (Iea_ramp * ia_ref - iLa) - (vga * inv_vo) + 0.5f;
         }
 
-        if (ramp_started_b && !ramp_done) {
+        if (ramp_started_b) {
 
             db = (K * inv_vo) * (Ieb_ramp * ib_ref - iLb) - (vgb * inv_vo) + 0.5f;
         }
 
-        if (ramp_started_c && !ramp_done) {
+        if (ramp_started_c) {
 
             dc = (K * inv_vo) * (Iec_ramp * ic_ref - iLc) - (vgc * inv_vo) + 0.5f;
         }
     }
 
-    // Control PID para la tensión de salida
+
+     if (STATE == STATE_HOLD_CURRENT)
+    {
+
+		/*
+		if ((ConversionCount * Ts) >= 1)
+        {
+            ConversionCount = 0;
+                if (up == 1) {Vo = 200;}
+                if (up == -1) {Vo = 240;}
+                up *= -1;
+        }
+        */
+       da = (K * inv_vo) * (Ie_target * ia_ref - iLa) - (vga * inv_vo) + 0.5f;
+       db = (K * inv_vo) * (Ie_target * ib_ref - iLb) - (vgb * inv_vo) + 0.5f;
+       dc = (K * inv_vo) * (Ie_target * ic_ref - iLc) - (vgc * inv_vo) + 0.5f;
+    }
+
+
+
+    // Control PID para la tensiï¿½n de salida
    if (STATE == STATE_NORMAL_OPERATION)
     {
 
@@ -650,16 +672,15 @@ void ControlAlgorithm(void)
        pid_e_prev2 = pid_e_prev1;
        pid_e_prev1 = pid_e_curr;
 
-       da = (K * inv_vo) * (Ie_target * ia_ref - iLa) - (vga * inv_vo) + 0.5f;
-       db = (K * inv_vo) * (Ie_target * ib_ref - iLb) - (vgb * inv_vo) + 0.5f;
-       dc = (K * inv_vo) * (Ie_target * ic_ref - iLc) - (vgc * inv_vo) + 0.5f;
-    }
-   //GpioDataRegs.GPCSET.bit.GPIO71 = 1;
+       da = (K * inv_vo) * (pid_output * ia_ref - iLa) - (vga * inv_vo) + 0.5f;
+       db = (K * inv_vo) * (pid_output * ib_ref - iLb) - (vgb * inv_vo) + 0.5f;
+       dc = (K * inv_vo) * (pid_output * ic_ref - iLc) - (vgc * inv_vo) + 0.5f;
+    };
 }
 
 
 //***************************************************************************
-// Función ResteVariables - Reset de las variables del sistema
+// Funciï¿½n ResteVariables - Reset de las variables del sistema
 //***************************************************************************
 void ResetVariables(void)
 {
@@ -676,12 +697,12 @@ void ResetVariables(void)
     // Variables para la Precarga Individual por Fase
     Iea_ramp = 0.0f, Ieb_ramp = 0.0f, Iec_ramp = 0.0f;           // Amplitudes actuales de la rampa
     ramp_started_a = 0, ramp_started_b = 0, ramp_started_c = 0;  // Flags de inicio de rampa por fase
-    ramp_done_a = 0, ramp_done_b = 0, ramp_done_c = 0;           // Flags de finalización de rampa por fase
-    ramp_done = 0;                                               // Flag general de finalización de todas las rampas
+    ramp_done_a = 0, ramp_done_b = 0, ramp_done_c = 0;           // Flags de finalizaciï¿½n de rampa por fase
+    ramp_done = 0;                                               // Flag general de finalizaciï¿½n de todas las rampas
     zc_a = 0, zc_b = 0, zc_c = 0;                                // Flags de cruce por cero
     start=0;
 
-    // Inicialización del Controlador PID
+    // Inicializaciï¿½n del Controlador PID
     pid_u_prev = Ie_target;                     // Salida anterior del PID u(n-1)
     pid_output = Ie_target;                     // Salida actual del PID u(n)
     pid_e_curr = 0.0f;                           // Error actual e(n)
@@ -699,32 +720,11 @@ void ResetVariables(void)
    EPwm2Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
    EPwm3Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW;
    EDIS;
+   enable_pid = 0;
+   K = 0.1*(K_max);
 }
 
 
-//***************************************************************************
-// ISR del ADC - Rutina de Servicio de Interrupción del ADC
-//***************************************************************************
-//__interrupt void adc_isr(void)
-//{
-//    GpioDataRegs.GPCCLEAR.bit.GPIO71 = 1;
-//
-//    // Leer los resultados de la secuencia
-//    AdcResults[0] = Adc1Result.ADCRESULT0; // ADCINA0 - Voltaje Fase A
-//    AdcResults[1] = Adc1Result.ADCRESULT1; // ADCINA1 - Voltaje Fase B
-//    AdcResults[2] = Adc1Result.ADCRESULT2; // ADCINA2 - Voltaje Fase C
-//    AdcResults[3] = Adc1Result.ADCRESULT3; // ADCINA3 - Corriente Inductor Fase A
-//    AdcResults[4] = Adc1Result.ADCRESULT4; // ADCINA4 - Corriente Inductor Fase B
-//    AdcResults[5] = Adc1Result.ADCRESULT5; // ADCINA5 - Corriente Inductor Fase C
-//    AdcResults[6] = Adc1Result.ADCRESULT6; // ADCINA6 - Tensión de Salida
-//
-//    if (STATE == STATE_NORMAL_OPERATION) ConversionCount++;
-//    adc_ready=1;
-//
-//    Adc1Regs.ADCINTFLGCLR.bit.ADCINT1 = 1;      // Limpiar el flag de interrupción del ADC
-//    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;     // Acknowledge de la interrupción en el PIE
-//
-//}
 
 //***************************************************************************
 // ISR del EPWM1 - Se dispara cuando TBCTR == CMPB (subida) a los 8us
@@ -735,7 +735,7 @@ __interrupt void epwm1_isr(void)
     float db_sat = __fmin(1.0f, __fmax(dmin, db));
     float dc_sat = __fmin(1.0f, __fmax(dmin, dc));
 
-    // Conversión a contadores
+    // Conversiï¿½n a contadores
     Uint16 period = TBPRD_VALUE;
 
     EPwm1Regs.CMPA.half.CMPA = (Uint16)(da_sat * period);
@@ -744,18 +744,10 @@ __interrupt void epwm1_isr(void)
 
     //GpioDataRegs.GPCCLEAR.bit.GPIO71 = 1;
 
-    EPwm1Regs.ETCLR.bit.INT = 1;            // Limpiar flag de interrupción de EPWM1
+    EPwm1Regs.ETCLR.bit.INT = 1;            // Limpiar flag de interrupciï¿½n de EPWM1
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP3; // Acknowledge interrupt to PIE
 }
 
-
-/*__interrupt void epwm2_isr(void)
-{
-    GpioDataRegs.GPCSET.bit.GPIO71 = 1;
-    EPwm2Regs.ETCLR.bit.INT = 1;       // Limpiar flag
-    PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
-}
-*/
 
 __interrupt void dma_adc_isr(void)
 {
@@ -765,10 +757,10 @@ __interrupt void dma_adc_isr(void)
     if (STATE == STATE_NORMAL_OPERATION) ConversionCount++;
     adc_ready=1;
 
-    // Limpiar flags para la siguiente interrupción
+    // Limpiar flags para la siguiente interrupciï¿½n
     EALLOW;
-    Adc1Regs.ADCINTFLGCLR.bit.ADCINT1 = 1;   // Limpiar el flag del periférico ADC
-    DmaRegs.CH1.CONTROL.bit.PERINTCLR = 1;   // Limpiar flag de interrupción del canal 1 del DMA
+    Adc1Regs.ADCINTFLGCLR.bit.ADCINT1 = 1;   // Limpiar el flag del perifï¿½rico ADC
+    DmaRegs.CH1.CONTROL.bit.PERINTCLR = 1;   // Limpiar flag de interrupciï¿½n del canal 1 del DMA
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP7;  // Acknowledge al Grupo 7 del PIE
     EDIS;
 }
@@ -776,7 +768,7 @@ __interrupt void dma_adc_isr(void)
 void Init_DMA_ADC(void)
 {
     EALLOW;
-    SysCtrlRegs.PCLKCR3.bit.DMAENCLK = 1; // Habilitar el reloj del módulo DMA
+    SysCtrlRegs.PCLKCR3.bit.DMAENCLK = 1; // Habilitar el reloj del mï¿½dulo DMA
     EDIS;
 
     // Reset por hardware del DMA
@@ -784,14 +776,14 @@ void Init_DMA_ADC(void)
     DmaRegs.DMACTRL.bit.HARDRESET = 1;
     __asm(" NOP");
 
-    // Configuración del Canal 1 del DMA
+    // Configuraciï¿½n del Canal 1 del DMA
     // BURST: Cantidad de palabras a transferir por cada disparo del ADC (N-1)
     DmaRegs.CH1.BURST_SIZE.all = 6;      // Queremos 7 conversiones (0 a 6)
-    DmaRegs.CH1.SRC_BURST_STEP = 1;      // Incremento de la dirección de origen (pasar al siguiente ADCRESULT)
-    DmaRegs.CH1.DST_BURST_STEP = 1;      // Incremento de la dirección de destino (pasar al siguiente índice del array)
+    DmaRegs.CH1.SRC_BURST_STEP = 1;      // Incremento de la direcciï¿½n de origen (pasar al siguiente ADCRESULT)
+    DmaRegs.CH1.DST_BURST_STEP = 1;      // Incremento de la direcciï¿½n de destino (pasar al siguiente ï¿½ndice del array)
 
-    // TRANSFER: Cuántas ráfagas componen una transferencia completa (N-1)
-    DmaRegs.CH1.TRANSFER_SIZE = 0;       // 1 sola ráfaga por evento
+    // TRANSFER: Cuï¿½ntas rï¿½fagas componen una transferencia completa (N-1)
+    DmaRegs.CH1.TRANSFER_SIZE = 0;       // 1 sola rï¿½faga por evento
     DmaRegs.CH1.SRC_TRANSFER_STEP = 0;   // No se usa en este caso
     DmaRegs.CH1.DST_TRANSFER_STEP = 0;   // No se usa en este caso
 
@@ -800,19 +792,19 @@ void Init_DMA_ADC(void)
     DmaRegs.CH1.DST_ADDR_SHADOW = (Uint32)&AdcResults[0];
 
     // Wrap (Reinicio de punteros tras la transferencia)
-    DmaRegs.CH1.SRC_WRAP_SIZE = 0xFFFF;  // Sin Wrap (mayor que el tamaño de transferencia)
+    DmaRegs.CH1.SRC_WRAP_SIZE = 0xFFFF;  // Sin Wrap (mayor que el tamaï¿½o de transferencia)
     DmaRegs.CH1.DST_WRAP_SIZE = 0xFFFF;  // Sin Wrap
 
-    // Configuración del Modo de Operación del CH1
+    // Configuraciï¿½n del Modo de Operaciï¿½n del CH1
     DmaRegs.CH1.MODE.bit.PERINTSEL = 1;  // Disparo del DMA: 1 = ADC1INT1 (Comprueba la tabla de tu TRM)
-    DmaRegs.CH1.MODE.bit.PERINTE = 1;    // Habilitar el disparo por periférico
+    DmaRegs.CH1.MODE.bit.PERINTE = 1;    // Habilitar el disparo por perifï¿½rico
     DmaRegs.CH1.MODE.bit.ONESHOT = 0;    // One-shot deshabilitado (transfiere un burst por cada trigger)
     DmaRegs.CH1.MODE.bit.CONTINUOUS = 1; // Modo continuo habilitado (los punteros se auto-recargan)
-    DmaRegs.CH1.MODE.bit.DATASIZE = 0;   // Tamaño de dato: 16-bits
+    DmaRegs.CH1.MODE.bit.DATASIZE = 0;   // Tamaï¿½o de dato: 16-bits
 
-    // Configuración de la Interrupción hacia la CPU
-    DmaRegs.CH1.MODE.bit.CHINTMODE = 1;  // Generar interrupción al FINAL de la transferencia completa
-    DmaRegs.CH1.MODE.bit.CHINTE = 1;     // Habilitar la interrupción de este canal
+    // Configuraciï¿½n de la Interrupciï¿½n hacia la CPU
+    DmaRegs.CH1.MODE.bit.CHINTMODE = 1;  // Generar interrupciï¿½n al FINAL de la transferencia completa
+    DmaRegs.CH1.MODE.bit.CHINTE = 1;     // Habilitar la interrupciï¿½n de este canal
 
     // Limpiar flags pendientes y arrancar el canal
     DmaRegs.CH1.CONTROL.bit.PERINTCLR = 1;
