@@ -151,7 +151,7 @@ volatile Uint16 enable_pid = 0;
 // Funci�n Principal - main
 //***************************************************************************
 main()
-{
+ {
     InitSysCtrl(); // Inicializar Control del Sistema
 
 #ifdef _FLASH
@@ -494,7 +494,7 @@ void Initialization(void)
     // C�lculo de par�metros derivados del sistema
     Ro = (Vo * Vo) / Po;
     //Ie_target = (2.0f * Vo * Vo) / (3.0f * Vg_rms * sqrt(2) * Ro);
-    Ie_target = 6.0f;
+    Ie_target = 5.0f;
     Q = 2.0f * cos (w * Ts) + 1.0f;
     invVg_peak = 1.0f / (Vg_rms * sqrt(2));
 
